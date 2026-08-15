@@ -22,7 +22,7 @@ export async function validateGeminiApiKey(apiKey: string): Promise<{ valid: boo
     const ai = new GoogleGenAI({ apiKey: trimmedKey });
     // Try pinging with Google GenAI
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: 'gemini-3.7-flash',
       contents: 'Ping test. Reply with OK.',
     });
 
@@ -33,6 +33,12 @@ export async function validateGeminiApiKey(apiKey: string): Promise<{ valid: boo
   } catch (error: any) {
     console.error('Validation error:', error);
     const errStr = `${error?.message || ''} ${JSON.stringify(error || {})}`;
+    if (errStr.includes('PERMISSION_DENIED') || errStr.includes('403')) {
+      return {
+        valid: false,
+        message: 'Akses Ditolak (403 PERMISSION_DENIED). Silakan buat API Key baru di aistudio.google.com dengan opsi "Create API key in NEW project".',
+      };
+    }
     if (errStr.includes('API_KEY_INVALID') || errStr.includes('API key not valid') || errStr.includes('400')) {
       return {
         valid: false,
@@ -137,7 +143,7 @@ Aturan Wajib Pembuatan Soal:
   try {
     const ai = new GoogleGenAI({ apiKey: trimmedKey });
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: 'gemini-3.7-flash',
       contents: prompt,
       config: {
         responseMimeType: 'application/json',
@@ -241,7 +247,7 @@ Berikan jawaban yang jelas, menyemangati, mudah dipahami siswa, serta sertakan t
 `;
 
     const res = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: 'gemini-3.7-flash',
       contents: prompt,
     });
     return res.text || 'Maaf, saya tidak dapat menghasilkan respon saat ini.';
