@@ -62,12 +62,7 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
       return;
     }
 
-    if (!trimmed.startsWith('AIzaSy') && trimmed.length < 20) {
-      setErrorMessage('Format API Key Gemini biasanya diawali dengan "AIzaSy...". Pastikan Anda menyalin seluruh karakter.');
-    } else {
-      setErrorMessage('');
-    }
-
+    setErrorMessage('');
     onSaveApiKey(trimmed);
     setSavedSuccess(true);
     setTimeout(() => {

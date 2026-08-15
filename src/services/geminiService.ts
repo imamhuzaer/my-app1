@@ -18,15 +18,9 @@ export async function validateGeminiApiKey(apiKey: string): Promise<{ valid: boo
     return { valid: false, message: 'API Key kosong.' };
   }
 
-  if (!trimmedKey.startsWith('AIzaSy')) {
-    return {
-      valid: false,
-      message: 'Format API Key Gemini harus diawali dengan "AIzaSy...". Pastikan Anda mengambil API Key dari Google AI Studio (aistudio.google.com/app/apikey).',
-    };
-  }
-
   try {
     const ai = new GoogleGenAI({ apiKey: trimmedKey });
+    // Try pinging with Google GenAI
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
       contents: 'Ping test. Reply with OK.',
@@ -42,13 +36,13 @@ export async function validateGeminiApiKey(apiKey: string): Promise<{ valid: boo
     if (errStr.includes('API_KEY_INVALID') || errStr.includes('API key not valid') || errStr.includes('400')) {
       return {
         valid: false,
-        message: 'API Key tidak valid. Pastikan Anda menyalin seluruh karakter dari Google AI Studio.',
+        message: 'Kunci ditolak oleh Google AI (API_KEY_INVALID). Periksa kembali akun/project di Google AI Studio.',
       };
     }
-    if (errStr.includes('quota') || errStr.includes('RESOURCE_EXHAUSTED')) {
+    if (errStr.includes('quota') || errStr.includes('RESOURCE_EXHAUSTED') || errStr.includes('429')) {
       return {
         valid: false,
-        message: 'Kuota API Key telah mencapai batas (Quota Limit). Gunakan API Key dari project Google AI Studio lainnya.',
+        message: 'Kuota API Key ini telah habis / rate limit. Buat kunci baru di project lain.',
       };
     }
     return {
