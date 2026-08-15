@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Sparkles, Send, X, Bot, User } from 'lucide-react';
 import { Question } from '../types';
+import { askAiTutor } from '../services/geminiService';
 
 interface AiTutorModalProps {
   question: Question | null;
@@ -30,25 +31,12 @@ export const AiTutorModal: React.FC<AiTutorModalProps> = ({ question, onClose, a
     setIsLoading(true);
 
     try {
-      const res = await fetch('/api/ai-explain', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          apiKey,
-          questionText: question.questionText,
-          options: question.options,
-          correctAnswer: question.correctAnswer,
-          explanation: question.explanation,
-          userPrompt: activeText,
-        }),
-      });
-
-      const data = await res.json();
+      const reply = await askAiTutor(question, activeText, apiKey || '');
       setMessages((prev) => [
         ...prev,
         {
           sender: 'ai',
-          text: data.reply || 'Maaf, terjadi kesalahan saat menghubungi AI Tutor.',
+          text: reply,
         },
       ]);
     } catch (error) {
@@ -57,7 +45,7 @@ export const AiTutorModal: React.FC<AiTutorModalProps> = ({ question, onClose, a
         ...prev,
         {
           sender: 'ai',
-          text: 'Maaf, gagal menghubungkan ke server AI. Silakan coba beberapa saat lagi.',
+          text: 'Maaf, gagal menghubungkan ke server AI. Silakan periksa kembali API Key Anda.',
         },
       ]);
     } finally {

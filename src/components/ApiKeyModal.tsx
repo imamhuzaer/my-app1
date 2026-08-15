@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Key, Eye, EyeOff, Check, ExternalLink, ShieldCheck, AlertCircle, X, Sparkles, Trash2, RefreshCw, CheckCircle2 } from 'lucide-react';
+import { validateGeminiApiKey } from '../services/geminiService';
 
 interface ApiKeyModalProps {
   isOpen: boolean;
@@ -41,17 +42,11 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
     setValidationSuccess(null);
 
     try {
-      const res = await fetch('/api/validate-key', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ apiKey: trimmed }),
-      });
-      const data = await res.json();
-
-      if (data.valid) {
-        setValidationSuccess(data.message || 'API Key valid dan siap digunakan!');
+      const result = await validateGeminiApiKey(trimmed);
+      if (result.valid) {
+        setValidationSuccess(result.message);
       } else {
-        setErrorMessage(data.message || 'API Key tidak valid. Pastikan Anda menyalin dari Google AI Studio.');
+        setErrorMessage(result.message);
       }
     } catch (e: any) {
       setErrorMessage(`Koneksi error: ${e.message}`);

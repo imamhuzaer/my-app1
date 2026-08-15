@@ -8,6 +8,7 @@ import { AiTutorModal } from './components/AiTutorModal';
 import { ApiKeyModal } from './components/ApiKeyModal';
 
 import { QuizConfig, Question, SavedQuiz } from './types';
+import { generateQuestionsWithGemini } from './services/geminiService';
 
 // Author protection signature
 const AUTHOR_SIGNATURE = 'imam huzaer';
@@ -119,32 +120,25 @@ export default function App() {
 
     setIsLoading(true);
     try {
-      const response = await fetch('/api/generate-questions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...config,
-          apiKey: apiKey.trim(),
-        }),
-      });
+      // First attempt client-side generation (100% works on Vercel SPA, Netlify, and standalone)
+      const data = await generateQuestionsWithGemini(config, apiKey.trim());
 
-      const data = await response.json();
       if (data.isAuthError) {
         alert(data.error || 'Autentikasi API Key Gemini gagal. Harap periksa kembali API Key Anda.');
         setIsApiKeyModalOpen(true);
       }
 
-      if (data.success && data.questions) {
+      if (data.success && data.questions && data.questions.length > 0) {
         const generatedTitle = data.title || `Soal ${config.subject} - ${config.topic}`;
         setQuizTitle(generatedTitle);
-        setQuizCurriculum(data.curriculum || config.curriculum || 'Kurikulum Merdeka');
+        setQuizCurriculum(config.curriculum || 'Kurikulum Merdeka');
         setQuestions(data.questions);
 
         // Auto Save to History (Riwayat Soal)
         const newHistoryItem: SavedQuiz = {
           id: `quiz-${Date.now()}`,
           title: generatedTitle,
-          curriculum: data.curriculum || config.curriculum,
+          curriculum: config.curriculum,
           createdAt: new Date().toISOString(),
           subject: config.subject,
           grade: config.grade,
@@ -153,11 +147,11 @@ export default function App() {
         };
         setSavedQuizzes((prev) => [newHistoryItem, ...prev]);
       } else if (!data.isAuthError) {
-        alert('Gagal menghasilkan soal. Silakan pastikan topik diisi dengan benar dan coba lagi.');
+        alert(data.error || 'Gagal menghasilkan soal. Silakan pastikan topik diisi dengan benar dan coba lagi.');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error generating questions:', error);
-      alert('Terjadi kesalahan jaringan. Silakan coba kembali.');
+      alert(`Terjadi kendala: ${error?.message || 'Silakan periksa koneksi internet Anda.'}`);
     } finally {
       setIsLoading(false);
     }
