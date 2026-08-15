@@ -35,10 +35,7 @@ export async function validateGeminiApiKey(apiKey: string): Promise<{ valid: boo
     } catch (error: any) {
       lastError = error;
       const errStr = `${error?.message || ''} ${JSON.stringify(error || {})}`;
-      if (errStr.includes('503') || errStr.includes('high demand') || errStr.includes('UNAVAILABLE')) {
-        // Try next model if 503 high demand
-        continue;
-      }
+      
       if (errStr.includes('PERMISSION_DENIED') || errStr.includes('403')) {
         return {
           valid: false,
@@ -57,6 +54,9 @@ export async function validateGeminiApiKey(apiKey: string): Promise<{ valid: boo
           message: 'Kuota API Key ini telah habis / rate limit. Buat kunci baru di project lain.',
         };
       }
+      
+      // For any other error (503, 404 Not Found, 500), continue to the next fallback model
+      continue;
     }
   }
 
@@ -233,11 +233,6 @@ Aturan Wajib Pembuatan Soal:
       console.warn(`Model ${modelName} encountered error:`, error?.message);
       const errStr = `${error?.message || ''} ${JSON.stringify(error || {})}`;
       
-      // If error is high demand (503), try next available model in cascade
-      if (errStr.includes('503') || errStr.includes('high demand') || errStr.includes('UNAVAILABLE') || errStr.includes('RESOURCE_EXHAUSTED')) {
-        continue;
-      }
-      
       // If auth error, stop loop immediately
       const isAuth = errStr.includes('API_KEY_INVALID') || errStr.includes('API key') || errStr.includes('400') || errStr.includes('PERMISSION_DENIED') || errStr.includes('403');
       if (isAuth) {
@@ -249,6 +244,20 @@ Aturan Wajib Pembuatan Soal:
           error: 'API Key tidak valid atau belum diaktifkan. Silakan periksa kunci di aistudio.google.com/app/apikey.',
         };
       }
+      
+      // If quota error
+      if (errStr.includes('quota') || errStr.includes('RESOURCE_EXHAUSTED') || errStr.includes('429')) {
+        return {
+          success: false,
+          isAuthError: true,
+          title: `Kuota API Key Habis`,
+          questions: [],
+          error: 'Kuota API Key telah habis. Silakan buat API Key baru dari project lain.',
+        };
+      }
+
+      // If error is high demand (503), 404 (model not found), or other API issues, try next available model in cascade
+      continue;
     }
   }
 
