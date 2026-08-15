@@ -124,7 +124,7 @@ Aturan Wajib Pembuatan Soal:
 `;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-3.6-flash',
+        model: 'gemini-3.7-flash',
         contents: prompt,
         config: {
           responseMimeType: 'application/json',
@@ -202,12 +202,15 @@ Aturan Wajib Pembuatan Soal:
       });
     } catch (error: any) {
       console.error('Error generating questions with Gemini:', error);
-      const isAuthError = error.message && (
-        error.message.includes('API_KEY_INVALID') ||
-        error.message.includes('API key') ||
-        error.message.includes('quota') ||
-        error.message.includes('403') ||
-        error.message.includes('401')
+      const errString = `${error?.message || ''} ${JSON.stringify(error || {})}`;
+      const isAuthError = (
+        errString.includes('API_KEY_INVALID') ||
+        errString.includes('API key not valid') ||
+        errString.includes('API key') ||
+        errString.includes('INVALID_ARGUMENT') ||
+        errString.includes('quota') ||
+        errString.includes('403') ||
+        errString.includes('401')
       );
 
       // Graceful fallback response
@@ -220,14 +223,52 @@ Aturan Wajib Pembuatan Soal:
         req.body.count || 5
       );
       return res.json({
-        success: true,
-        source: 'fallback_error',
+        success: !isAuthError,
+        source: isAuthError ? 'auth_error' : 'fallback_error',
         isAuthError,
         title: `Soal ${req.body.subject || 'Umum'} - ${req.body.topic || 'Kuis'}`,
         questions: fallbackQuestions,
         error: isAuthError 
-          ? `Gagal autentikasi API Key Gemini: ${error.message}. Pastikan API Key yang Anda masukkan valid di aistudio.google.com.`
+          ? `Gagal autentikasi API Key Gemini: Kunci tidak valid. Silakan buat atau periksa API Key Anda di aistudio.google.com/app/apikey.`
           : error.message,
+      });
+    }
+  });
+
+  // API Endpoint: Validate Gemini API Key
+  app.post('/api/validate-key', async (req, res) => {
+    try {
+      const { apiKey } = req.body;
+      if (!apiKey || !apiKey.trim()) {
+        return res.json({ valid: false, message: 'API Key kosong.' });
+      }
+
+      const client = new GoogleGenAI({
+        apiKey: apiKey.trim(),
+        httpOptions: {
+          headers: {
+            'User-Agent': 'aistudio-build',
+          },
+        },
+      });
+
+      const testRes = await client.models.generateContent({
+        model: 'gemini-3.7-flash',
+        contents: 'Test connection: reply with OK',
+      });
+
+      if (testRes && testRes.text) {
+        return res.json({ valid: true, message: 'API Key valid dan siap digunakan!' });
+      }
+      return res.json({ valid: false, message: 'Respon tidak sesuai dari server AI.' });
+    } catch (err: any) {
+      console.error('Validation error:', err);
+      const msg = err.message || 'API Key tidak valid.';
+      return res.json({
+        valid: false,
+        message: msg.includes('API_KEY_INVALID') || msg.includes('API key')
+          ? 'API Key tidak valid atau belum diaktifkan di Google AI Studio.'
+          : `Gagal memvalidasi API Key: ${msg}`,
       });
     }
   });
@@ -262,7 +303,7 @@ Berikan jawaban yang jelas, menyemangati, mudah dipahami siswa, serta sertakan t
 `;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-3.6-flash',
+        model: 'gemini-3.7-flash',
         contents: prompt,
       });
 

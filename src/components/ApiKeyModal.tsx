@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Key, Eye, EyeOff, Check, ExternalLink, ShieldCheck, AlertCircle, X, Sparkles, Trash2 } from 'lucide-react';
+import { Key, Eye, EyeOff, Check, ExternalLink, ShieldCheck, AlertCircle, X, Sparkles, Trash2, RefreshCw, CheckCircle2 } from 'lucide-react';
 
 interface ApiKeyModalProps {
   isOpen: boolean;
@@ -18,12 +18,47 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
   const [showKey, setShowKey] = useState(false);
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const [isValidating, setIsValidating] = useState(false);
+  const [validationSuccess, setValidationSuccess] = useState<string | null>(null);
 
   useEffect(() => {
     setInputKey(apiKey);
+    setErrorMessage('');
+    setValidationSuccess(null);
   }, [apiKey, isOpen]);
 
   if (!isOpen) return null;
+
+  const handleTestKey = async () => {
+    const trimmed = inputKey.trim();
+    if (!trimmed) {
+      setErrorMessage('Masukkan API Key terlebih dahulu sebelum menguji.');
+      return;
+    }
+
+    setIsValidating(true);
+    setErrorMessage('');
+    setValidationSuccess(null);
+
+    try {
+      const res = await fetch('/api/validate-key', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ apiKey: trimmed }),
+      });
+      const data = await res.json();
+
+      if (data.valid) {
+        setValidationSuccess(data.message || 'API Key valid dan siap digunakan!');
+      } else {
+        setErrorMessage(data.message || 'API Key tidak valid. Pastikan Anda menyalin dari Google AI Studio.');
+      }
+    } catch (e: any) {
+      setErrorMessage(`Koneksi error: ${e.message}`);
+    } finally {
+      setIsValidating(false);
+    }
+  };
 
   const handleSave = () => {
     const trimmed = inputKey.trim();
@@ -34,7 +69,6 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
 
     if (!trimmed.startsWith('AIzaSy') && trimmed.length < 20) {
       setErrorMessage('Format API Key Gemini biasanya diawali dengan "AIzaSy...". Pastikan Anda menyalin seluruh karakter.');
-      // Still allow saving if user confirms, but show warning
     } else {
       setErrorMessage('');
     }
@@ -51,6 +85,7 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
     setInputKey('');
     onSaveApiKey('');
     setErrorMessage('');
+    setValidationSuccess(null);
   };
 
   return (
@@ -74,7 +109,7 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
             <div>
               <h2 className="text-lg font-bold">Pengaturan Gemini API Key</h2>
               <p className="text-xs text-indigo-200">
-                Gunakan API Key Gemini pribadi agar bebas limit bersama
+                Gunakan API Key Gemini pribadi agar bebas antrean kuota
               </p>
             </div>
           </div>
@@ -87,9 +122,9 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
             <div className="flex items-start space-x-2.5">
               <Sparkles className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
               <div className="text-xs text-indigo-950 space-y-1">
-                <p className="font-bold">Mengapa wajib input API Key manual?</p>
+                <p className="font-bold">Mengapa butuh API Key Gemini?</p>
                 <p className="text-indigo-800 text-[11px] leading-relaxed">
-                  Dengan menggunakan API Key Gemini Anda sendiri, pembuatan soal AI tidak akan terganggu oleh antrean atau limit kuota pengguna lain. API Key tersimpan aman di browser Anda (LocalStorage).
+                  API Key digunakan untuk memproses pembuatan soal AI secara cerdas dan akurat. Kunci disimpan aman hanya di browser Anda (LocalStorage).
                 </p>
               </div>
             </div>
@@ -108,7 +143,10 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
                 value={inputKey}
                 onChange={(e) => {
                   setInputKey(e.target.value);
-                  if (e.target.value.trim()) setErrorMessage('');
+                  if (e.target.value.trim()) {
+                    setErrorMessage('');
+                    setValidationSuccess(null);
+                  }
                 }}
                 placeholder="Tempelkan API Key di sini (contoh: AIzaSy...)"
                 className="w-full pl-4 pr-24 py-3 text-xs font-mono bg-slate-50 border border-slate-300 rounded-xl text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:bg-white transition-all"
@@ -136,9 +174,29 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
               </div>
             </div>
 
+            {/* Test Connection Button */}
+            <div className="flex items-center justify-between pt-1">
+              <button
+                type="button"
+                onClick={handleTestKey}
+                disabled={isValidating || !inputKey.trim()}
+                className="inline-flex items-center space-x-1.5 px-3 py-1 text-xs font-semibold rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 disabled:opacity-50 transition-colors"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isValidating ? 'animate-spin' : ''}`} />
+                <span>{isValidating ? 'Menguji Kunci...' : 'Uji Koneksi Kunci'}</span>
+              </button>
+            </div>
+
+            {validationSuccess && (
+              <p className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 p-2.5 rounded-xl flex items-center space-x-2 font-medium">
+                <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />
+                <span>{validationSuccess}</span>
+              </p>
+            )}
+
             {errorMessage && (
-              <p className="text-xs text-rose-600 flex items-center space-x-1 font-semibold">
-                <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+              <p className="text-xs text-rose-700 bg-rose-50 border border-rose-200 p-2.5 rounded-xl flex items-center space-x-2 font-medium">
+                <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
                 <span>{errorMessage}</span>
               </p>
             )}
@@ -148,7 +206,7 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
           <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between">
             <div className="space-y-0.5">
               <span className="text-xs font-bold text-slate-800 block">Belum punya API Key?</span>
-              <span className="text-[11px] text-slate-500 block">Dapatkan secara gratis dari Google AI Studio</span>
+              <span className="text-[11px] text-slate-500 block">Dapatkan gratis di Google AI Studio</span>
             </div>
             <a
               href="https://aistudio.google.com/app/apikey"
