@@ -1,0 +1,6 @@
+{
+  "name": "Generator Soal & Kuis AI",
+  "description": "Aplikasi generator soal ujian, kuis, dan lembar kerja siswa interaktif dengan AI Gemini. Lengkap dengan pembahasan, mode kuis, dan ekspor PDF/Word.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
