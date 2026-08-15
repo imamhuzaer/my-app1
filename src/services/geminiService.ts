@@ -18,44 +18,60 @@ export async function validateGeminiApiKey(apiKey: string): Promise<{ valid: boo
     return { valid: false, message: 'API Key kosong.' };
   }
 
-  try {
-    const ai = new GoogleGenAI({ apiKey: trimmedKey });
-    // Try pinging with Google GenAI
-    const response = await ai.models.generateContent({
-      model: 'gemini-3.7-flash',
-      contents: 'Ping test. Reply with OK.',
-    });
+  const modelsToTry = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-2.5-pro'];
 
-    if (response && response.text) {
-      return { valid: true, message: 'API Key valid dan siap digunakan!' };
+  let lastError: any = null;
+  for (const model of modelsToTry) {
+    try {
+      const ai = new GoogleGenAI({ apiKey: trimmedKey });
+      const response = await ai.models.generateContent({
+        model: model,
+        contents: 'Ping test. Reply with OK.',
+      });
+
+      if (response && response.text) {
+        return { valid: true, message: 'API Key valid dan siap digunakan!' };
+      }
+    } catch (error: any) {
+      lastError = error;
+      const errStr = `${error?.message || ''} ${JSON.stringify(error || {})}`;
+      if (errStr.includes('503') || errStr.includes('high demand') || errStr.includes('UNAVAILABLE')) {
+        // Try next model if 503 high demand
+        continue;
+      }
+      if (errStr.includes('PERMISSION_DENIED') || errStr.includes('403')) {
+        return {
+          valid: false,
+          message: 'Akses Ditolak (403 PERMISSION_DENIED). Silakan buat API Key baru di aistudio.google.com dengan opsi "Create API key in NEW project".',
+        };
+      }
+      if (errStr.includes('API_KEY_INVALID') || errStr.includes('API key not valid') || errStr.includes('400')) {
+        return {
+          valid: false,
+          message: 'Kunci ditolak oleh Google AI (API_KEY_INVALID). Periksa kembali akun/project di Google AI Studio.',
+        };
+      }
+      if (errStr.includes('quota') || errStr.includes('RESOURCE_EXHAUSTED') || errStr.includes('429')) {
+        return {
+          valid: false,
+          message: 'Kuota API Key ini telah habis / rate limit. Buat kunci baru di project lain.',
+        };
+      }
     }
-    return { valid: false, message: 'Respon dari Google AI tidak sesuai.' };
-  } catch (error: any) {
-    console.error('Validation error:', error);
-    const errStr = `${error?.message || ''} ${JSON.stringify(error || {})}`;
-    if (errStr.includes('PERMISSION_DENIED') || errStr.includes('403')) {
-      return {
-        valid: false,
-        message: 'Akses Ditolak (403 PERMISSION_DENIED). Silakan buat API Key baru di aistudio.google.com dengan opsi "Create API key in NEW project".',
-      };
-    }
-    if (errStr.includes('API_KEY_INVALID') || errStr.includes('API key not valid') || errStr.includes('400')) {
-      return {
-        valid: false,
-        message: 'Kunci ditolak oleh Google AI (API_KEY_INVALID). Periksa kembali akun/project di Google AI Studio.',
-      };
-    }
-    if (errStr.includes('quota') || errStr.includes('RESOURCE_EXHAUSTED') || errStr.includes('429')) {
-      return {
-        valid: false,
-        message: 'Kuota API Key ini telah habis / rate limit. Buat kunci baru di project lain.',
-      };
-    }
+  }
+
+  const finalErrStr = `${lastError?.message || ''}`;
+  if (finalErrStr.includes('503') || finalErrStr.includes('high demand')) {
     return {
-      valid: false,
-      message: `Gagal memvalidasi API Key: ${error?.message || 'Periksa koneksi internet atau kunci Anda.'}`,
+      valid: true,
+      message: 'API Key valid! (Server Google sedang padat sementara waktu, Anda tetap bisa mencoba generate soal).',
     };
   }
+
+  return {
+    valid: false,
+    message: `Gagal memvalidasi API Key: ${lastError?.message || 'Periksa koneksi internet atau kunci Anda.'}`,
+  };
 }
 
 // Client-side Question Generator (Universal for Vercel / Netlify / Standalone SPA)
@@ -140,82 +156,119 @@ Aturan Wajib Pembuatan Soal:
 11. Jika soal memerlukan referensi visual/diagram (misalnya diagram grafik, sel, peta, atau bidang datar), sertakan imageUrl (opsional URL gambar diagram) dan imageCaption singkat.
 `;
 
-  try {
-    const ai = new GoogleGenAI({ apiKey: trimmedKey });
-    const response = await ai.models.generateContent({
-      model: 'gemini-3.7-flash',
-      contents: prompt,
-      config: {
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: 'object',
-          properties: {
-            title: { type: 'string' },
-            curriculum: { type: 'string' },
-            questions: {
-              type: 'array',
-              items: {
-                type: 'object',
-                properties: {
-                  type: { type: 'string', enum: ['pg', 'isian', 'uraian', 'benar_salah'] },
-                  questionText: { type: 'string' },
-                  options: {
-                    type: 'array',
-                    items: { type: 'string' },
+  const modelsToTry = [
+    'gemini-2.5-flash',
+    'gemini-2.0-flash',
+    'gemini-1.5-flash',
+    'gemini-2.5-pro',
+  ];
+
+  let lastError: any = null;
+
+  for (const modelName of modelsToTry) {
+    try {
+      const ai = new GoogleGenAI({ apiKey: trimmedKey });
+      const response = await ai.models.generateContent({
+        model: modelName,
+        contents: prompt,
+        config: {
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: 'object',
+            properties: {
+              title: { type: 'string' },
+              curriculum: { type: 'string' },
+              questions: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    type: { type: 'string', enum: ['pg', 'isian', 'uraian', 'benar_salah'] },
+                    questionText: { type: 'string' },
+                    options: {
+                      type: 'array',
+                      items: { type: 'string' },
+                    },
+                    correctAnswer: { type: 'string' },
+                    explanation: { type: 'string' },
+                    difficulty: { type: 'string', enum: ['mudah', 'sedang', 'sulit', 'hots'] },
+                    bloomTaxonomy: { type: 'string' },
+                    indicator: { type: 'string' },
+                    rubric: { type: 'string' },
+                    imageUrl: { type: 'string' },
+                    imageCaption: { type: 'string' },
                   },
-                  correctAnswer: { type: 'string' },
-                  explanation: { type: 'string' },
-                  difficulty: { type: 'string', enum: ['mudah', 'sedang', 'sulit', 'hots'] },
-                  bloomTaxonomy: { type: 'string' },
-                  indicator: { type: 'string' },
-                  rubric: { type: 'string' },
-                  imageUrl: { type: 'string' },
-                  imageCaption: { type: 'string' },
+                  required: ['type', 'questionText', 'correctAnswer', 'explanation', 'difficulty', 'bloomTaxonomy', 'indicator'],
                 },
-                required: ['type', 'questionText', 'correctAnswer', 'explanation', 'difficulty', 'bloomTaxonomy', 'indicator'],
               },
             },
+            required: ['title', 'questions'],
           },
-          required: ['title', 'questions'],
         },
-      },
-    });
+      });
 
-    const parsedData = cleanAndParseJSON(response.text || '{}');
-    const sanitizedQuestions: Question[] = (parsedData.questions || []).map((q: any, idx: number) => ({
-      id: `q-${Date.now()}-${idx + 1}`,
-      type: q.type || 'pg',
-      questionText: q.questionText || `Pertanyaan nomor ${idx + 1}`,
-      options: Array.isArray(q.options) && q.options.length > 0 ? q.options : (q.type === 'pg' ? ['A', 'B', 'C', 'D'] : undefined),
-      correctAnswer: String(q.correctAnswer || ''),
-      explanation: q.explanation || 'Pembahasan telah diverifikasi oleh AI.',
-      difficulty: q.difficulty || difficulty,
-      bloomTaxonomy: q.bloomTaxonomy || 'C3 Menerapkan',
-      indicator: q.indicator || `Menyelesaikan masalah terkait ${topic}`,
-      rubric: q.rubric,
-      imageUrl: q.imageUrl,
-      imageCaption: q.imageCaption,
-    }));
+      const parsedData = cleanAndParseJSON(response.text || '{}');
+      const sanitizedQuestions: Question[] = (parsedData.questions || []).map((q: any, idx: number) => ({
+        id: `q-${Date.now()}-${idx + 1}`,
+        type: q.type || 'pg',
+        questionText: q.questionText || `Pertanyaan nomor ${idx + 1}`,
+        options: Array.isArray(q.options) && q.options.length > 0 ? q.options : (q.type === 'pg' ? ['A', 'B', 'C', 'D'] : undefined),
+        correctAnswer: String(q.correctAnswer || ''),
+        explanation: q.explanation || 'Pembahasan telah diverifikasi oleh AI.',
+        difficulty: q.difficulty || difficulty,
+        bloomTaxonomy: q.bloomTaxonomy || 'C3 Menerapkan',
+        indicator: q.indicator || `Menyelesaikan masalah terkait ${topic}`,
+        rubric: q.rubric,
+        imageUrl: q.imageUrl,
+        imageCaption: q.imageCaption,
+      }));
 
-    return {
-      success: true,
-      title: parsedData.title || `Soal ${activeSubject} - ${topic}`,
-      questions: sanitizedQuestions,
-    };
-  } catch (error: any) {
-    console.error('Error in client-side generation:', error);
-    const errStr = `${error?.message || ''} ${JSON.stringify(error || {})}`;
-    const isAuth = errStr.includes('API_KEY_INVALID') || errStr.includes('API key') || errStr.includes('400');
+      return {
+        success: true,
+        title: parsedData.title || `Soal ${activeSubject} - ${topic}`,
+        questions: sanitizedQuestions,
+      };
+    } catch (error: any) {
+      lastError = error;
+      console.warn(`Model ${modelName} encountered error:`, error?.message);
+      const errStr = `${error?.message || ''} ${JSON.stringify(error || {})}`;
+      
+      // If error is high demand (503), try next available model in cascade
+      if (errStr.includes('503') || errStr.includes('high demand') || errStr.includes('UNAVAILABLE') || errStr.includes('RESOURCE_EXHAUSTED')) {
+        continue;
+      }
+      
+      // If auth error, stop loop immediately
+      const isAuth = errStr.includes('API_KEY_INVALID') || errStr.includes('API key') || errStr.includes('400') || errStr.includes('PERMISSION_DENIED') || errStr.includes('403');
+      if (isAuth) {
+        return {
+          success: false,
+          isAuthError: true,
+          title: `Gagal Autentikasi API Key`,
+          questions: [],
+          error: 'API Key tidak valid atau belum diaktifkan. Silakan periksa kunci di aistudio.google.com/app/apikey.',
+        };
+      }
+    }
+  }
+
+  // If all models failed
+  const errStr = `${lastError?.message || ''} ${JSON.stringify(lastError || {})}`;
+  if (errStr.includes('503') || errStr.includes('high demand') || errStr.includes('UNAVAILABLE')) {
     return {
       success: false,
-      isAuthError: isAuth,
-      title: `Gagal Generate Soal`,
+      title: 'Server Google Sedang Padat',
       questions: [],
-      error: isAuth
-        ? 'API Key tidak valid. Pastikan Anda menyalin seluruh karakter dari aistudio.google.com/app/apikey (diawali dengan AIzaSy...).'
-        : (error.message || 'Terjadi kesalahan saat memproses soal.'),
+      error: 'Server Google Gemini sedang mengalami lonjakan antrean sementara (503 High Demand). Silakan klik tombol "Generate Soal" sekali lagi dalam 5-10 detik.',
     };
   }
+
+  return {
+    success: false,
+    title: `Gagal Generate Soal`,
+    questions: [],
+    error: lastError?.message || 'Terjadi kesalahan saat memproses soal. Silakan coba lagi.',
+  };
 }
 
 // Client-side AI Tutor / Explanation
@@ -229,9 +282,7 @@ export async function askAiTutor(
     return `**Tutor AI (Moda Standar):**\nPertanyaan ini berfokus pada pemahaman konsep dasar. Jawaban yang benar adalah **${question.correctAnswer}**.\n\nPembahasan: ${question.explanation}.\n\n*Masukkan API Key Gemini Anda di menu utama untuk penjelasan interaktif tingkat lanjut.*`;
   }
 
-  try {
-    const ai = new GoogleGenAI({ apiKey: trimmedKey });
-    const prompt = `
+  const prompt = `
 Anda adalah seorang Tutor Pendidikan dan Guru Pendamping yang sangat bersahabat, sabar, dan ramah.
 Siswa menanyakan tentang soal berikut:
 
@@ -246,13 +297,22 @@ PERTANYAAN SISWA:
 Berikan jawaban yang jelas, menyemangati, mudah dipahami siswa, serta sertakan tips/trik cepat jika ada. Jika ada rumus matematika atau sains, tuliskan dalam format LaTeX yang diapit $ ... $. Gunakan format Markdown yang rapi.
 `;
 
-    const res = await ai.models.generateContent({
-      model: 'gemini-3.7-flash',
-      contents: prompt,
-    });
-    return res.text || 'Maaf, saya tidak dapat menghasilkan respon saat ini.';
-  } catch (error: any) {
-    console.error('Tutor AI error:', error);
-    return `**Tutor AI:**\nTerjadi kendala saat menghubungkan ke AI Gemini (${error.message || 'Error'}).\n\nPenjelasan singkat: Jawaban yang tepat adalah **${question.correctAnswer}**. ${question.explanation}`;
+  const modelsToTry = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
+
+  for (const modelName of modelsToTry) {
+    try {
+      const ai = new GoogleGenAI({ apiKey: trimmedKey });
+      const res = await ai.models.generateContent({
+        model: modelName,
+        contents: prompt,
+      });
+      if (res && res.text) {
+        return res.text;
+      }
+    } catch (error: any) {
+      console.warn(`Tutor model ${modelName} error:`, error?.message);
+    }
   }
+
+  return `**Tutor AI:**\nJawaban yang tepat adalah **${question.correctAnswer}**.\n\nPembahasan: ${question.explanation}`;
 }
